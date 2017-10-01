@@ -1,36 +1,39 @@
 from __future__ import print_function
 import numpy as np
+import sys
 import tensorflow as tf
-
 import argparse
 import time
 import os
 from six.moves import cPickle
-
 from utils import TextLoader
 from model import Model
+os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
+
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_dir', type=str, default='data/tinyshakespeare',
+    parser.add_argument('--data_train_dir', type=str, default='data/amy_train',
                        help='data directory containing input.txt')
+    parser.add_argument('--data_test_dir', type=str, default='data/amy_test',
+                        help='data directory containing input.txt')
     parser.add_argument('--input_encoding', type=str, default=None,
-                       help='character encoding of input.txt, from https://docs.python.org/3/library/codecs.html#standard-encodings')
+                       help='character encoding of input.txt')
     parser.add_argument('--log_dir', type=str, default='logs',
                        help='directory containing tensorboard logs')
     parser.add_argument('--save_dir', type=str, default='save',
                        help='directory to store checkpointed models')
-    parser.add_argument('--rnn_size', type=int, default=256,
+    parser.add_argument('--rnn_size', type=int, default=128,
                        help='size of RNN hidden state')
     parser.add_argument('--num_layers', type=int, default=2,
                        help='number of layers in the RNN')
     parser.add_argument('--model', type=str, default='lstm',
                        help='rnn, gru, or lstm')
-    parser.add_argument('--batch_size', type=int, default=50,
+    parser.add_argument('--batch_size', type=int, default=1,
                        help='minibatch size')
-    parser.add_argument('--seq_length', type=int, default=25,
+    parser.add_argument('--seq_length', type=int, default=984,
                        help='RNN sequence length')
-    parser.add_argument('--num_epochs', type=int, default=50,
+    parser.add_argument('--num_epochs', type=int, default=10,
                        help='number of epochs')
     parser.add_argument('--save_every', type=int, default=1000,
                        help='save frequency')
@@ -51,10 +54,10 @@ def main():
                             'model.ckpt-*'      : file(s) with model definition (created by tf)
                         """)
     args = parser.parse_args()
-    train(args)
+    run_model(args)
 
-def train(args):
-    data_loader = TextLoader(args.data_dir, args.batch_size, args.seq_length, args.input_encoding)
+def run_model(args, test = True):
+    data_loader = TextLoader(args.data_train_dir, args.batch_size, args.seq_length, args.input_encoding)
     args.vocab_size = data_loader.vocab_size
 
     # check compatibility if training is continued from previously saved model
@@ -129,6 +132,32 @@ def train(args):
                     saver.save(sess, checkpoint_path, global_step = e * data_loader.num_batches + b)
                     print("model saved to {}".format(checkpoint_path))
         train_writer.close()
+
+        if test:
+            # todo: this is very hacky... change it later
+            test_data_loader = TextLoader(args.data_test_dir, args.batch_size, args.seq_length, args.input_encoding)
+
+            # loop over the entire data set and generate the probabilities of the next word
+            for b in range(test_data_loader.pointer, test_data_loader.num_batches):
+                x, y = test_data_loader.next_batch()
+                feed = {model.input_data: x, model.targets: y, model.initial_state: state,
+                        model.batch_time: speed}
+                summary, train_loss, state, probs, _, _ = sess.run([merged, model.cost, model.final_state, model.probs,
+                                                                model.train_op, model.inc_batch_pointer_op], feed)
+                # save probability vectors along with the text
+                np.save(os.path.join(args.data_test_dir, 'probs.npy'), probs)
+
+                # print(np.shape(probs))
+                # print(np.shape(x))
+                print(test_data_loader.full_text_len)
+                # print(test_data_loader.full_text)
+                # print(probs)
+                # print(x)
+                # print(y)
+            # sys.exit('STOP')
+
+
+
 
 if __name__ == '__main__':
     main()

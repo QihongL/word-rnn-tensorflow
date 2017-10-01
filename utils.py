@@ -5,6 +5,7 @@ import collections
 from six.moves import cPickle
 import numpy as np
 import re
+import sys
 import itertools
 
 class TextLoader():
@@ -18,7 +19,8 @@ class TextLoader():
         tensor_file = os.path.join(data_dir, "data.npy")
 
         # Let's not read voca and data from file. We many change them.
-        if True or not (os.path.exists(vocab_file) and os.path.exists(tensor_file)):
+        # if True or not (os.path.exists(vocab_file) and os.path.exists(tensor_file)):
+        if True:
             print("reading text file")
             self.preprocess(input_file, vocab_file, tensor_file, encoding)
         else:
@@ -33,6 +35,7 @@ class TextLoader():
         Original taken from https://github.com/yoonkim/CNN_sentence/blob/master/process_data
         """
         string = re.sub(r"[^가-힣A-Za-z0-9(),!?\'\`]", " ", string)
+        string = re.sub("[\(\[\{].*?[\}\)\]]", "", string)
         string = re.sub(r"\'s", " \'s", string)
         string = re.sub(r"\'ve", " \'ve", string)
         string = re.sub(r"n\'t", " n\'t", string)
@@ -45,6 +48,12 @@ class TextLoader():
         string = re.sub(r"\)", " \) ", string)
         string = re.sub(r"\?", " \? ", string)
         string = re.sub(r"\s{2,}", " ", string)
+
+        cleaned_txt = ''
+        for character in string:
+            if character.isalpha() or character is ' ':
+                cleaned_txt += character
+        string = cleaned_txt
         return string.strip().lower()
 
     def build_vocab(self, sentences):
@@ -66,9 +75,11 @@ class TextLoader():
             data = f.read()
 
         # Optional text cleaning or make them lower case, etc.
-        #data = self.clean_str(data)
+        data = self.clean_str(data)
         x_text = data.split()
-
+        # create full batch
+        self.full_text = x_text
+        self.full_text_len = len(x_text)
         self.vocab, self.words = self.build_vocab(x_text)
         self.vocab_size = len(self.words)
 

@@ -3,6 +3,7 @@ from tensorflow.contrib import rnn
 from tensorflow.contrib import legacy_seq2seq
 import random
 import numpy as np
+import sys
 
 from beam import BeamSearch
 
@@ -65,10 +66,16 @@ class Model():
             prev_symbol = tf.stop_gradient(tf.argmax(prev, 1))
             return tf.nn.embedding_lookup(embedding, prev_symbol)
 
+
         outputs, last_state = legacy_seq2seq.rnn_decoder(inputs, self.initial_state, cell, loop_function=loop if infer else None, scope='rnnlm')
+
+
         output = tf.reshape(tf.concat(outputs, 1), [-1, args.rnn_size])
+
+        # logits \in m x n, where m = batch_size x seq_length, n = vocab_size
         self.logits = tf.matmul(output, softmax_w) + softmax_b
         self.probs = tf.nn.softmax(self.logits)
+
         loss = legacy_seq2seq.sequence_loss_by_example([self.logits],
                 [tf.reshape(self.targets, [-1])],
                 [tf.ones([args.batch_size * args.seq_length])],
