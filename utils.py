@@ -34,6 +34,7 @@ class TextLoader():
         Tokenization/string cleaning for all datasets except for SST.
         Original taken from https://github.com/yoonkim/CNN_sentence/blob/master/process_data
         """
+        string = re.sub("[\{\[].*?[\}\]]", "", string)
         string = re.sub(r"[^가-힣A-Za-z0-9(),!?\'\`]", " ", string)
         string = re.sub("[\(\[\{].*?[\}\)\]]", "", string)
         string = re.sub(r"\'s", " \'s", string)
@@ -54,6 +55,7 @@ class TextLoader():
             if character.isalpha() or character is ' ':
                 cleaned_txt += character
         string = cleaned_txt
+        string = " ".join(string.split())
         return string.strip().lower()
 
     def build_vocab(self, sentences):
@@ -123,3 +125,6 @@ class TextLoader():
 
     def reset_batch_pointer(self):
         self.pointer = 0
+
+
+

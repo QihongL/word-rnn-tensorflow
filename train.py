@@ -7,8 +7,9 @@ import time
 import os
 from six.moves import cPickle
 from utils import TextLoader
+from utils_q import *
 from model import Model
-os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
+# os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
 
 
 def main():
@@ -23,27 +24,31 @@ def main():
                        help='directory containing tensorboard logs')
     parser.add_argument('--save_dir', type=str, default='save',
                        help='directory to store checkpointed models')
-    parser.add_argument('--rnn_size', type=int, default=128,
+    parser.add_argument('--rnn_size', type=int, default=32,
                        help='size of RNN hidden state')
-    parser.add_argument('--num_layers', type=int, default=2,
+    parser.add_argument('--num_layers', type=int, default=1,
                        help='number of layers in the RNN')
     parser.add_argument('--model', type=str, default='lstm',
                        help='rnn, gru, or lstm')
-    parser.add_argument('--batch_size', type=int, default=1,
+    # parser.add_argument('--batch_size', type=int, default=2,
+    #                    help='minibatch size')
+    # parser.add_argument('--seq_length', type=int, default=5,
+    #                    help='RNN sequence length')
+    parser.add_argument('--batch_size', type=int, default=12,
                        help='minibatch size')
-    parser.add_argument('--seq_length', type=int, default=984,
+    parser.add_argument('--seq_length', type=int, default=41,
                        help='RNN sequence length')
-    parser.add_argument('--num_epochs', type=int, default=10,
+    parser.add_argument('--num_epochs', type=int, default=50,
                        help='number of epochs')
-    parser.add_argument('--save_every', type=int, default=1000,
+    parser.add_argument('--save_every', type=int, default=10000,
                        help='save frequency')
     parser.add_argument('--grad_clip', type=float, default=5.,
                        help='clip gradients at this value')
-    parser.add_argument('--learning_rate', type=float, default=0.002,
+    parser.add_argument('--learning_rate', type=float, default=0.003,
                        help='learning rate')
     parser.add_argument('--decay_rate', type=float, default=0.97,
                        help='decay rate for rmsprop')
-    parser.add_argument('--gpu_mem', type=float, default=0.666,
+    parser.add_argument('--gpu_mem', type=float, default=1,
                        help='%% of gpu memory to be allocated to this process. Default is 66.6%%')
     parser.add_argument('--init_from', type=str, default=None,
                        help="""continue training from saved model at this path. Path must contain files saved by previous training process:
@@ -138,25 +143,33 @@ def run_model(args, test = True):
             test_data_loader = TextLoader(args.data_test_dir, args.batch_size, args.seq_length, args.input_encoding)
 
             # loop over the entire data set and generate the probabilities of the next word
+            first_batch = True
             for b in range(test_data_loader.pointer, test_data_loader.num_batches):
                 x, y = test_data_loader.next_batch()
                 feed = {model.input_data: x, model.targets: y, model.initial_state: state,
                         model.batch_time: speed}
                 summary, train_loss, state, probs, _, _ = sess.run([merged, model.cost, model.final_state, model.probs,
                                                                 model.train_op, model.inc_batch_pointer_op], feed)
+
                 # save probability vectors along with the text
-                np.save(os.path.join(args.data_test_dir, 'probs.npy'), probs)
-
                 # print(np.shape(probs))
-                # print(np.shape(x))
-                print(test_data_loader.full_text_len)
-                # print(test_data_loader.full_text)
-                # print(probs)
-                # print(x)
-                # print(y)
-            # sys.exit('STOP')
+                # get probability and indices for the top k predictions
+                k = 100
+                prob_table_top_k, sorting_idx_table_top_k = get_top_k_probs_and_indices(probs, k)
 
+                # collect info
+                if first_batch:
+                    PROBS = prob_table_top_k
+                    IDX   = sorting_idx_table_top_k
+                    first_batch = False
+                else:
+                    PROBS = np.vstack([PROBS, prob_table_top_k])
+                    IDX   = np.vstack([IDX,   sorting_idx_table_top_k])
 
+            # save the probability table and indices
+            print(np.shape(PROBS))
+            print('whole seq length = %d' % test_data_loader.full_text_len)
+            np.savez(os.path.join(args.data_test_dir, 'probs'), prob_table=PROBS, idx_table=IDX)
 
 
 if __name__ == '__main__':
